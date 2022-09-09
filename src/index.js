@@ -40,6 +40,28 @@ server.post("/sign-up", async (req, res) => {
         return res.sendStatus(500);
     }
 });
+server.get("/sign-in", async (req,res)=>{
+    const {email, password} = req.body;
+    
+    try {
+        const user = await db.collection("users").findOne({email});
+        if(!user) return res.status(401).send("E-mail incorreto!");
+
+        const passWordIsValid = bcrypt.compareSync(password, user.password);
+        if(!passWordIsValid) return res.status(401).send("Senha incorreta!")
+
+        if(user && passWordIsValid){
+            const token = uuid();
+            const session = await db.collection("sessions").insertOne({userId: user._id, token});
+        }
+
+        return res.send(token);
+
+    } catch (error) {
+        console.error(error);
+        return res.sendStatus(500);
+    }
+});
 
 server.listen(5000, () =>{
     console.log("Server is running on port 5000")
