@@ -108,6 +108,39 @@ server.post("/new-entry", async (req,res) => {
         return res.sendStatus(500);
     }
 });
+server.post("/new-exit", async (req, res) => {
+    const { authorization } = req.headers;
+    const token = authorization?.replace("Bearer ", "");
+    const { type, value, description } = req.body;
+
+    if(!token) return res.sendStatus(422);
+    const isValidNewExit = transactionSchema.validate({value, type, description}, {abortEarly: false});
+
+    if(isValidNewExit.error){
+        const newExitError = isValidNewExit.error.details.map(details => details.message);
+        return res.status(422).send(newExitError);
+    };
+
+    try {
+        const user = await db.collection("sessions").findOne({token});
+        if(!user) return res.sendStatus(401);
+
+        const session = await db.collection("transactions").findOne({token: user.token});
+        const updateTransactions = {type: "exit", value: value, description: description};
+        {
+            session !== null?
+            await db.collection("transactions").updateOne({transactions: session.transactions}, {$push: {transactions: updateTransactions}})
+            :
+            await db.collection("transactions").insertOne({token, transactions: [{type, value, description}]});
+        }
+        return res.sendStatus(201);
+
+    } catch (error) {
+        console.error(error);
+        res.sendStatus(500);
+    }
+
+});
 
 
 server.listen(5000, () =>{
