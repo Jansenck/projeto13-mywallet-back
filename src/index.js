@@ -35,13 +35,13 @@ server.post("/sign-up", async (req, res) => {
         return res.status(422).send(signUpError);
     }
     const encryptedPassword = bcrypt.hashSync(password, 10);
-    
+    delete req.body.password;
     try {
         const userAlreadyExists = await db.collection("users").findOne({email});
         if(userAlreadyExists){
             return res.status(401).send("Esse email não está disponível!")
         }
-        const user = await db.collection("users").insertOne({name, email, password:encryptedPassword});
+        await db.collection("users").insertOne({name, email, password:encryptedPassword});
         return res.sendStatus(201);
 
     } catch (error) {
@@ -93,13 +93,13 @@ server.post("/new-entry", async (req,res) => {
         const user = await db.collection("sessions").findOne({token});
         if(!user) return res.sendStatus(401);
 
-        const session = await db.collection("transactions").findOne({token: user.token});
+        const session = await db.collection("transactions").findOne({userId: user.userId});
         const updateTransactions = {type: "entry", value: value, description: description};
         {
             session !== null?
             await db.collection("transactions").updateOne({transactions: session.transactions}, {$push: {transactions: updateTransactions}})
             :
-            await db.collection("transactions").insertOne({token, transactions: [{type, value, description}]});
+            await db.collection("transactions").insertOne({userId: user.userId, transactions: [{type, value, description}]});
         }
         return res.sendStatus(201);
 
@@ -146,14 +146,17 @@ server.get("/transactions", async (req, res) => {
 
     const token = authorization?.replace("Bearer ", "");
     if(!token) return res.sendStatus(401);
-
+    
     try {
         const user = await db.collection("sessions").findOne({token});
+        console.log(user)
         if(!user) return res.sendStatus(401);
    
-        const session = await db.collection("transactions").findOne({token: user.token});
-        const { transactions } = session;
-        return res.send(transactions);
+        const session = await db.collection("transactions").findOne({userId: user.userId});
+        if(session){
+            const { transactions } = session;
+            return res.send(transactions);
+        }
     } catch (error) {
         console.error(error);
         return res.sendStatus(500);
