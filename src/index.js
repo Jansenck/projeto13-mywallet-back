@@ -15,18 +15,27 @@ const signUpSchema = joi.object({
     email: joi.string().email().required(),
     password: joi.string().empty().required()
 });
+const singInSchema = joi.object({
+    email: joi.string().email().empty().required(),
+    password: joi.string().empty().required()
+});
+const transactionSchema = joi.object({
+    type: joi.string().empty().valid("entry", "exit").required(),
+    value: joi.string().empty().required(),
+    description: joi.string().empty().required()
+});
 
 server.post("/sign-up", async (req, res) => {
     
     const {name, email, password} = req.body;
-    const validationSignUp = signUpSchema.validate({name, email, password}, {abortEarly: false});
+    const isValidSignUp = signUpSchema.validate({name, email, password}, {abortEarly: false});
 
-    if(validationSignUp.error){
-        const err = validationSignUp.error.details.map((detail) => detail.message);
-        return res.status(422).send(err);
+    if(isValidSignUp.error){
+        const signUpError = isValidSignUp.error.details.map((detail) => detail.message);
+        return res.status(422).send(signUpError);
     }
     const encryptedPassword = bcrypt.hashSync(password, 10);
-
+    
     try {
         const userAlreadyExists = await db.collection("users").findOne({email});
         if(userAlreadyExists){
@@ -40,28 +49,66 @@ server.post("/sign-up", async (req, res) => {
         return res.sendStatus(500);
     }
 });
-server.get("/sign-in", async (req,res)=>{
+server.post("/sign-in", async (req,res)=>{
     const {email, password} = req.body;
+    const isValidSignInSchema = singInSchema.validate({email, password}, {abortEarly: false});
+
+    if(isValidSignInSchema.error){
+        const signInError = isValidSignInSchema.error.details.map(detail => detail.message); 
+        return res.status(422).send(signInError); 
+    }
     
     try {
         const user = await db.collection("users").findOne({email});
-        if(!user) return res.status(401).send("E-mail incorreto!");
+        if(!user) return res.status(422).send("E-mail incorreto!");
 
         const passWordIsValid = bcrypt.compareSync(password, user.password);
-        if(!passWordIsValid) return res.status(401).send("Senha incorreta!")
+        if(!passWordIsValid) return res.status(422).send("Senha incorreta!")
 
         if(user && passWordIsValid){
             const token = uuid();
-            const session = await db.collection("sessions").insertOne({userId: user._id, token});
+            await db.collection("sessions").insertOne({userId: user._id, token});
+            return res.send(token);
         }
-
-        return res.send(token);
 
     } catch (error) {
         console.error(error);
         return res.sendStatus(500);
     }
 });
+
+server.post("/new-entry", async (req,res) => {
+    const { authorization } = req.headers;
+    const token = authorization?.replace("Bearer ", "");
+    const { type, value, description } = req.body;
+    
+    if(!token) return res.sendStatus(422);
+    const isValidNewEntry = transactionSchema.validate({value, type, description}, {abortEarly: false});
+
+    if(isValidNewEntry.error){
+        const newEntryError = isValidNewEntry.error.details.map(details => details.message);
+        return res.status(422).send(newEntryError);
+    }
+    try {
+        const user = await db.collection("sessions").findOne({token});
+        if(!user) return res.sendStatus(401);
+
+        const session = await db.collection("transactions").findOne({token: user.token});
+        const updateTransactions = {type: "entry", value: value, description: description};
+        {
+            session !== null?
+            await db.collection("transactions").updateOne({transactions: session.transactions}, {$push: {transactions: updateTransactions}})
+            :
+            await db.collection("transactions").insertOne({token, transactions: [{type, value, description}]});
+        }
+        return res.sendStatus(201);
+
+    } catch (error) {
+        console.error(error);
+        return res.sendStatus(500);
+    }
+});
+
 
 server.listen(5000, () =>{
     console.log("Server is running on port 5000")
