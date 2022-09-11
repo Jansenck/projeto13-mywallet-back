@@ -141,7 +141,24 @@ server.post("/new-exit", async (req, res) => {
     }
 
 });
+server.get("/transactions", async (req, res) => {
+    const {authorization} = req.headers;
 
+    const token = authorization?.replace("Bearer ", "");
+    if(!token) return res.sendStatus(401);
+
+    try {
+        const user = await db.collection("sessions").findOne({token});
+        if(!user) return res.sendStatus(401);
+   
+        const session = await db.collection("transactions").findOne({token: user.token});
+        const { transactions } = session;
+        return res.send(transactions);
+    } catch (error) {
+        console.error(error);
+        return res.sendStatus(500);
+    }
+});
 
 server.listen(5000, () =>{
     console.log("Server is running on port 5000")
