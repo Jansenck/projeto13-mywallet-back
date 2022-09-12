@@ -6,7 +6,6 @@ const mongoClient = new MongoClient(process.env.MONGO_URI);
 
 try {
     await mongoClient.connect();
-
 } catch (error) {
     console.error(error.message);
     res.sendStatus(500);
