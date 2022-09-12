@@ -68,7 +68,7 @@ server.post("/sign-in", async (req,res)=>{
         if(user && passWordIsValid){
             const token = uuid();
             await db.collection("sessions").insertOne({userId: user._id, token});
-            return res.send(token);
+            return res.send({token, name: user.name});
         }
 
     } catch (error) {
@@ -125,7 +125,7 @@ server.post("/new-exit", async (req, res) => {
         const user = await db.collection("sessions").findOne({token});
         if(!user) return res.sendStatus(401);
 
-        const session = await db.collection("transactions").findOne({token: user.token});
+        const session = await db.collection("transactions").findOne({userId: user.userId});
         const updateTransactions = {type: "exit", value: value, description: description};
         {
             session !== null?
@@ -133,6 +133,7 @@ server.post("/new-exit", async (req, res) => {
             :
             await db.collection("transactions").insertOne({token, transactions: [{type, value, description}]});
         }
+        
         return res.sendStatus(201);
 
     } catch (error) {
@@ -149,7 +150,6 @@ server.get("/transactions", async (req, res) => {
     
     try {
         const user = await db.collection("sessions").findOne({token});
-        console.log(user)
         if(!user) return res.sendStatus(401);
    
         const session = await db.collection("transactions").findOne({userId: user.userId});
